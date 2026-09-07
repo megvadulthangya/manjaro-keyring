@@ -2,26 +2,41 @@ name: Sync master from Manjaro GitLab (safe)
 
 on:
   schedule:
-    - cron: '0 5 * * *'
-  workflow_dispatch:
+    - cron: '0 5 * * *'   # Runs daily at 05:00 UTC
+  workflow_dispatch:       # Allows manual trigger
 
 permissions:
-  contents: write
+  contents: write          # Needed to push changes back to the repository
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
+    env:
+      # Git HTTP timeout settings (in seconds)
+      # Similar to FlashGet's "Connection Timeout" and "Data Timeout"
+      GIT_HTTP_TIMEOUT: 300                  # Max time to wait for an HTTP response
+      GIT_HTTP_LOW_SPEED_LIMIT: 1000         # Minimum acceptable transfer speed (bytes/sec)
+      GIT_HTTP_LOW_SPEED_TIME: 60            # Time (seconds) below the speed limit before aborting
+
     steps:
       - name: Checkout GitHub repo
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 0                     # Fetch all history and branches
 
-      - name: Add GitLab remote
+      - name: Add GitLab remote (idempotent)
         run: |
-          git remote add gitlab https://gitlab.manjaro.org/packages/core/manjaro-keyring.git || true
-          git fetch gitlab
+          git remote remove gitlab 2>/dev/null || true   # Remove any existing remote to avoid conflicts
+          git remote add gitlab https://gitlab.manjaro.org/packages/core/manjaro-keyring.git
+
+      - name: Fetch GitLab with retry
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10               # Overall time limit for all retries (like FlashGet's total timeout)
+          max_attempts: 5                   # Maximum number of attempts (including the first)
+          retry_wait_seconds: 60            # Delay between retries (like FlashGet's "Retry Delay")
+          command: git fetch gitlab         # Command to execute; will be retried on failure
 
       - name: Configure git user
         run: |
@@ -31,8 +46,12 @@ jobs:
       - name: Merge GitLab master into GitHub master
         run: |
           git checkout -B master origin/master
-          git merge gitlab/master --no-edit || true
+          git merge gitlab/master --no-edit || true   # Continue even if merge reports "already up to date"
 
-      - name: Push changes to GitHub
-        run: |
-          git push origin master
+      - name: Push changes to GitHub with retry
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 5
+          retry_wait_seconds: 60
+          command: git push origin master
