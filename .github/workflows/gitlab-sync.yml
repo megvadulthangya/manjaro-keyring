@@ -31,7 +31,7 @@ jobs:
           git remote add gitlab https://gitlab.manjaro.org/packages/core/manjaro-keyring.git
 
       - name: Fetch GitLab with retry
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 10               # Overall time limit for all retries (like FlashGet's total timeout)
           max_attempts: 5                   # Maximum number of attempts (including the first)
@@ -49,7 +49,7 @@ jobs:
           git merge gitlab/master --no-edit || true   # Continue even if merge reports "already up to date"
 
       - name: Push changes to GitHub with retry
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 10
           max_attempts: 5
